@@ -21,5 +21,20 @@ load_data <- function(species) {
     df <- read.csv(save_location)
     unlink(save_location)
     df <- format_data(df)
+    lat_long <- postcode_lat_longs()
+    lat_long <- lat_long[lat_long$postcode %in% df$Postcode, ]
+    lat_long <- group_by(lat_long, postcode) %>%
+        mutate(lat = mean(lat), long = mean(long)) %>%
+        unique()
+    df <- merge(df, lat_long, by.x = "Postcode", by.y = "postcode") %>%
+        tibble()
     return(df)
+}
+
+
+postcode_lat_longs <- function() {
+    lat_long <- read.csv(
+        "https://www.matthewproctor.com/Content/postcodes/australian_postcodes.csv"
+    )
+    return(tibble(lat_long[, c("postcode", "lat", "long")]))
 }

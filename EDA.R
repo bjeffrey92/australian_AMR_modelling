@@ -21,6 +21,7 @@ aggregate_freq <- function(quart_data) {
     )
 }
 
+
 plot_time_series <- function(species) {
     df <- load_data(species)
     aggregated_data <- lapply(
