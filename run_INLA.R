@@ -85,10 +85,7 @@ species_ab_combos <- list(
     c("Ecoli", "NORF"),
     c("Ecoli", "TRIM"),
     c("Staph", "CFOX"),
-    c("Staph", "CLEX"),
-    c("Staph", "COTR"),
     c("Staph", "ERYT"),
-    c("Staph", "METH"),
     c("Staph", "MUPI"),
     c("Staph", "PENI"),
     c("Staph", "TETR")
