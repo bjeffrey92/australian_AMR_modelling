@@ -3,11 +3,42 @@ library(dplyr)
 source("data_loader.R")
 
 
-exlcude_infrequent <- function(df, threshold = 10) {
+exclude_infrequent <- function(df, threshold = 10) {
     df <- df %>%
         group_by(Postcode, Antibiotic) %>%
         filter(n() > threshold)
     return(df)
+}
+
+
+drop_locs_with_missing <- function(df) {
+    n_time_points <- length(
+        ts(
+            start = min(a$Year_Quarter),
+            end = max(a$Year_Quarter),
+            frequency = 4
+        )
+    )
+    inspect_time_series <- function(data) {
+        if (
+            nrow(data) == n_time_points
+        ) {
+            return(data)
+        } else {
+            data.frame(
+                matrix(
+                    ncol = ncol(data),
+                    nrow = 0,
+                    dimnames = list(NULL, names(data))
+                )
+            )
+        }
+    }
+    tables <- lapply(
+        group_by(df, Postcode, .add = TRUE) %>% group_split(),
+        inspect_time_series
+    )
+    return(do.call("rbind", tables))
 }
 
 
