@@ -14,8 +14,8 @@ exclude_infrequent <- function(df, threshold = 10) {
 drop_locs_with_missing <- function(df) {
     n_time_points <- length(
         ts(
-            start = min(a$Year_Quarter),
-            end = max(a$Year_Quarter),
+            start = min(df$Year_Quarter),
+            end = max(df$Year_Quarter),
             frequency = 4
         )
     )
