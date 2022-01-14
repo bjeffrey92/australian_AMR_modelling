@@ -8,6 +8,11 @@ main <- function(species, ab, prediction_steps = 4, AR = 4) {
     df <- df[df$Antibiotic == ab, ]
     df <- drop_locs_with_missing(df)
 
+    location_counts <- table(df$Postcode)
+    if (length(location_counts) < 5 | min(location_counts) < 10) {
+        return(FALSE)
+    }
+
     # needs to start from 1
     df$time_point <- as.numeric(as.factor(df$Year_Quarter))
 
@@ -20,7 +25,7 @@ main <- function(species, ab, prediction_steps = 4, AR = 4) {
 
     if (prediction_steps > 0) {
         last_time_points <- tail(
-            sort(unique(data[[time_col]])),
+            sort(unique(df[[time_col]])),
             prediction_steps
         )
         df <- as.data.frame(df) # convert to dataframe to retain the index
@@ -75,7 +80,8 @@ main <- function(species, ab, prediction_steps = 4, AR = 4) {
         out[["validation"]] <- validation
         out[["validation_data"]] <- validation_data
     }
-    saveRDS(out, sprintf("inla_result_%s_%s", species, ab))
+    saveRDS(out, sprintf("inla_result_%s_%s.rds", species, ab))
+    return(TRUE)
 }
 
 species_ab_combos <- list(
@@ -92,5 +98,10 @@ species_ab_combos <- list(
 )
 
 for (i in species_ab_combos) {
-    main(i[[1]], i[[2]])
+    success <- main(i[[1]], i[[2]])
+    if (success) {
+        sprintf("%s completed", i)
+    } else {
+        sprintf("insufficient data for %s", i)
+    }
 }
