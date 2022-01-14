@@ -6,10 +6,9 @@ source("EDA.R")
 main <- function(species, ab, prediction_steps = 4, AR = 4) {
     df <- cache_load_data(species)
     df <- df[df$Antibiotic == ab, ]
-    df <- drop_locs_with_missing(df)
 
-    location_counts <- table(df$Postcode)
-    if (length(location_counts) < 5 | min(location_counts) < 10) {
+    df <- validate_data(df)
+    if (is.null(df)) {
         return(FALSE)
     }
 

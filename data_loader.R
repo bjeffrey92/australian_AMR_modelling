@@ -31,8 +31,6 @@ load_data <- function(species) {
     df <- read.csv(save_location)
     unlink(save_location)
 
-    df <- format_data(df)
-
     lat_long <- postcode_lat_longs()
     lat_long <- lat_long[lat_long$postcode %in% df$Postcode, ]
     lat_long <- group_by(lat_long, postcode) %>%
@@ -41,7 +39,7 @@ load_data <- function(species) {
     df <- merge(df, lat_long, by.x = "Postcode", by.y = "postcode") %>%
         tibble()
 
-    return(df)
+    return(format_data(df))
 }
 
 cache_load_data <- memoise(load_data)

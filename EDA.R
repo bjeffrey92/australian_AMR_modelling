@@ -72,3 +72,26 @@ plot_time_series <- function(species) {
         dev.off()
     }
 }
+
+species_ab_combos <- list(
+    c("Ecoli", "AMPI"),
+    c("Ecoli", "AUGM"),
+    c("Ecoli", "CLEX"),
+    c("Ecoli", "NORF"),
+    c("Ecoli", "TRIM"),
+    c("Staph", "CFOX"),
+    c("Staph", "ERYT"),
+    c("Staph", "MUPI"),
+    c("Staph", "PENI"),
+    c("Staph", "TETR")
+)
+
+validate_data <- function(df) {
+    df <- drop_locs_with_missing(df)
+
+    location_counts <- table(df$Postcode)
+    if (length(location_counts) < 5 | min(location_counts) < 10) {
+        return(NULL)
+    }
+    return(df)
+}
