@@ -46,7 +46,7 @@ import_and_format_data <- function(species,
 }
 
 
-compute_ar_param <- function(data) {
+compute_ar_param <- function(df) {
     arima_model <- ts(df$prop.R) %>% auto.arima()
     return(arimaorder(arima_model)[c(1, 3)] %>% max(2))
 }
@@ -126,10 +126,11 @@ main <- function(species, ab, prediction_steps = 4, likelihood = "beta") {
     all_data <- rbind(data, validation_data)
 
     out <- list(
-        "mesh_and_spde" = mesh_and_spde,
-        "stack_and_formula" = stack_and_formula,
+        "spde" = spde,
+        "stack" = stack,
+        "formula" = formula,
         "mod_mode" = mod_mode,
-        "all_data" = all_data,
+        "all_data" = all_data
     )
 
     saveRDS(
