@@ -1,3 +1,5 @@
+library(dplyr)
+
 source("INLA_driver.R")
 source("data_loader.R")
 source("EDA.R")
@@ -38,6 +40,16 @@ import_and_format_data <- function(species, ab, prediction_steps, likelihood) {
     return(list(data, validation_data))
 }
 
+plot_fit <- function(data, fitted_values) {
+    data$fitted_values <- slice(fitted_values, as.integer(rownames(data)))$mean
+    data$indices <- as.numeric(as.factor(data$Year_Quarter))
+
+    ggplot(data) +
+        geom_point(aes(x = indices, y = prop.R)) +
+        geom_line(aes(x = indices, y = fitted_values)) +
+        facet_wrap(vars(Postcode))
+}
+
 
 main <- function(species, ab, prediction_steps = 4,
                  AR = 4, likelihood = "beta") {
@@ -45,7 +57,6 @@ main <- function(species, ab, prediction_steps = 4,
     y_col <- "lat"
     time_col <- "time_point"
     response_col <- "prop.R"
-    location_col <- "Postcode"
 
     all_data <- import_and_format_data(
         species,
@@ -61,13 +72,10 @@ main <- function(species, ab, prediction_steps = 4,
 
     spde <- build_mesh_and_spde(data, x_col, y_col, time_col)
 
-    stacks <- build_stack(
+    stack <- build_stack(
         data, validation_data, x_col,
         y_col, time_col, response_col, spde
     )
-    stack_est <- stacks[[1]]
-    stack_pred <- stacks[[2]]
-    stack <- inla.stack(stack_est, stack_pred)
 
     formula_string <-
         sprintf(
@@ -77,39 +85,22 @@ main <- function(species, ab, prediction_steps = 4,
     formula <- as.formula(formula_string)
 
     mod_mode <- inla(formula,
-        data = inla.stack.data(stack_est, spde = spde),
-        family = likelihood,
-        control.predictor = list(A = inla.stack.A(stack_est), compute = FALSE),
-        control.compute = list(cpo = FALSE),
-        keep = FALSE, verbose = TRUE,
-        control.inla = list(reordering = "metis")
-    )
-    mod <- inla(formula,
         data = inla.stack.data(stack, spde = spde),
         family = likelihood,
-        control.predictor = list(A = inla.stack.A(stack), compute = TRUE),
-        control.compute = list(cpo = TRUE, dic = TRUE),
-        control.mode = list(theta = mod_mode$mode$theta, restart = FALSE),
-        keep = FALSE, verbose = TRUE,
-        control.inla = list(reordering = "metis")
+        control.predictor = list(
+            A = inla.stack.A(stack),
+            compute = TRUE,
+            link = 1
+        ),
+        keep = FALSE,
+        verbose = TRUE,
     )
 
     index_est <- inla.stack.index(stack, "est")$data
     index_pred <- inla.stack.index(stack, "pred")$data
-    est_predictions <- mod$summary.linear.predictor[index_est, "mean"]
-    val_predictions <- mod$summary.linear.predictor[index_pred, "mean"]
+    est_predictions <- mod_mode$summary.fitted.val[index_est, "mean"]
+    val_predictions <- mod_mode$summary.fitted.val[index_pred, "mean"]
 
-
-    # validation <- validate_model_fit(
-    #     result,
-    #     data,
-    #     validation_data,
-    #     response_col,
-    #     time_col,
-    #     location_col,
-    #     stack_and_formula[["stack.est"]],
-    #     prediction_steps
-    # )
     out <- list(
         "mesh_and_spde" = mesh_and_spde,
         "stack_and_formula" = stack_and_formula,

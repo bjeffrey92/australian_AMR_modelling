@@ -6,7 +6,7 @@ build_mesh_and_spde <- function(data, x_col, y_col, time_col) {
         unique(data[[y_col]])
     )
     mesh <- INLA::inla.mesh.2d(
-        loc = locations_matrix, max.edge = 0.2, offset = 0.2, min.angle = 1
+        loc = locations_matrix, max.edge = c(0.1, 0.2), offset = c(0.1, 0.3)
     )
     return(inla.spde2.matern(mesh = mesh))
 }
@@ -65,5 +65,5 @@ build_stack <- function(data, validation_data, x_col,
         tag = "pred"
     )
 
-    return(list(stack_est, stack_pred))
+    return(inla.stack(stack_est, stack_pred))
 }
