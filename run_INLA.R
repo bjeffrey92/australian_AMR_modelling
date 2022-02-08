@@ -1,4 +1,5 @@
 library(dplyr)
+library(forecast)
 
 source("INLA_driver.R")
 source("data_loader.R")
@@ -45,6 +46,13 @@ import_and_format_data <- function(species,
 }
 
 
+compute_ar_param <- function(data) {
+    arima_model <- ts(df$prop.R) %>% auto.arima()
+    return(arimaorder(arima_model)[c(1, 3)] %>% max(2))
+}
+compute_ar_param_ <- Vectorize(compute_ar_param)
+
+
 plot_fit <- function(data) {
     data$indices <- as.numeric(as.factor(data$Year_Quarter))
 
@@ -55,8 +63,7 @@ plot_fit <- function(data) {
 }
 
 
-main <- function(species, ab, prediction_steps = 4,
-                 AR = 4, likelihood = "beta") {
+main <- function(species, ab, prediction_steps = 4, likelihood = "beta") {
     x_col <- "long"
     y_col <- "lat"
     time_col <- "time_point"
@@ -75,6 +82,12 @@ main <- function(species, ab, prediction_steps = 4,
     data <- all_data[[1]]
     validation_data <- all_data[[2]]
 
+    ar_param <- data %>%
+        group_split(Postcode) %>%
+        compute_ar_param_() %>%
+        max()
+
+
     spde <- build_mesh_and_spde(data, x_col, y_col, time_col)
 
     stack <- build_stack(
@@ -85,7 +98,7 @@ main <- function(species, ab, prediction_steps = 4,
     formula_string <-
         sprintf(
             "outcome ~ -1 + Intercept + f(field, model = spde, group = field.group, control.group = list(model = 'ar', order=%s))",
-            AR
+            ar_param
         )
     formula <- as.formula(formula_string)
 
