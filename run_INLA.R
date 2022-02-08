@@ -13,7 +13,11 @@ beta_censoring_correction <- function(y_values) {
 }
 
 
-import_and_format_data <- function(species, ab, prediction_steps, likelihood) {
+import_and_format_data <- function(species,
+                                   ab,
+                                   prediction_steps,
+                                   likelihood,
+                                   time_col) {
     df <- cache_load_data(species)
     df <- df[df$Antibiotic == ab, ]
 
@@ -62,7 +66,8 @@ main <- function(species, ab, prediction_steps = 4,
         species,
         ab,
         prediction_steps,
-        likelihood
+        likelihood,
+        time_col
     )
     if (is.null(all_data)) {
         return(FALSE)
