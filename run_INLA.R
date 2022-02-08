@@ -40,13 +40,13 @@ import_and_format_data <- function(species, ab, prediction_steps, likelihood) {
     return(list(data, validation_data))
 }
 
-plot_fit <- function(data, fitted_values) {
-    data$fitted_values <- slice(fitted_values, as.integer(rownames(data)))$mean
+
+plot_fit <- function(data) {
     data$indices <- as.numeric(as.factor(data$Year_Quarter))
 
     ggplot(data) +
-        geom_point(aes(x = indices, y = prop.R)) +
-        geom_line(aes(x = indices, y = fitted_values)) +
+        geom_point(aes(x = indices, y = prop.R, colour = train_test)) +
+        geom_line(aes(x = indices, y = fitted_values, colour = train_test)) +
         facet_wrap(vars(Postcode))
 }
 
@@ -101,13 +101,17 @@ main <- function(species, ab, prediction_steps = 4,
     est_predictions <- mod_mode$summary.fitted.val[index_est, "mean"]
     val_predictions <- mod_mode$summary.fitted.val[index_pred, "mean"]
 
+    data$fitted_values <- est_predictions
+    data$train_test <- "train"
+    validation_data$fitted_values <- val_predictions
+    validation_data$train_test <- "test"
+    all_data <- rbind(data, validation_data)
+
     out <- list(
         "mesh_and_spde" = mesh_and_spde,
         "stack_and_formula" = stack_and_formula,
-        "result" = result,
-        "data" = data,
-        "validation" = validation,
-        "validation_data" <- validation_data
+        "mod_mode" = mod_mode,
+        "all_data" = all_data,
     )
 
     saveRDS(
