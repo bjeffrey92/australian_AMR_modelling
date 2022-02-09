@@ -13,16 +13,14 @@ load_inla_result <- function(species, ab, likelihood, percentage_correction = FA
             ab
         )
     )
-    index <- as.integer(row.names(inla_results$validation_data))
-    mean_prediction <- inla_results$result$summary.linear.predictor[
-        index, "mean"
+    validation_data <- inla_results$all_data[
+        inla_results$all_data$train_test == "test",
     ]
+    validation_data$inla_forecast <- validation_data$fitted_values
     if (percentage_correction) {
-        mean_prediction <- mean_prediction * 100
+        validation_data$inla_forecast <- validation_data$inla_forecast * 100
     }
 
-    validation_data <- inla_results$validation_data
-    validation_data$inla_forecast <- mean_prediction
     validation_data$Forecasting_Horizon <- as.numeric(
         as.factor(
             validation_data$Year_Quarter
@@ -66,9 +64,14 @@ clip_predictions <- function(predictions, min = 0, max = 100) {
 }
 
 
-load_results <- function(species, ab, inla_likelihood) {
+load_results <- function(species, ab, inla_likelihood, percentage_correction = FALSE) {
     ts_result <- load_ts_result(species, ab)
-    inla_result <- load_inla_result(species, ab, inla_likelihood)
+    inla_result <- load_inla_result(
+        species,
+        ab,
+        inla_likelihood,
+        percentage_correction
+    )
     result <- merge(ts_result, inla_result)
     result <- pivot_longer(
         result,
@@ -98,27 +101,40 @@ format_results <- function(result) {
 
 plot_result <- function(result, species, ab) {
     result <- format_results(result)
-    png(
-        sprintf("%s_%s_forecast_accuracy.png", species, ab),
-        width = 1080,
-        height = 1080
-    )
-    ggplot(
+    p <- ggplot(
         result,
         aes(x = forecast_type, y = error, fill = Forecasting_Horizon)
     ) +
         geom_boxplot() +
         theme(
-            text = element_text(size = 22),
+            # text = element_text(size = 22),
             axis.text.x = element_text(angle = 60, hjust = 1)
         )
-    dev.off()
+    ggsave(sprintf("%s_%s_forecast_accuracy.png", species, ab),
+        plot = p,
+    )
 }
+
 
 for (i in species_ab_combos) {
     species <- i[[1]]
     ab <- i[[2]]
-    result <- load_results(species, ab, inla_likelihood = "gaussian")
-    result$error <- abs(result$Perc.R - result$forecast)
-    plot_result(result, species, ab)
+    tryCatch(
+        expr = {
+            result <- load_results(
+                species,
+                ab,
+                inla_likelihood = "beta",
+                percentage_correction = TRUE
+            )
+            result$error <- abs(result$Perc.R - result$forecast)
+            plot_result(result, species, ab)
+        },
+        error = function(e) {
+            print(e)
+            sprintf(
+                "Failed for %s %s", species, ab
+            )
+        }
+    )
 }
