@@ -82,11 +82,10 @@ main <- function(species, ab, prediction_steps = 4, likelihood = "beta") {
     data <- all_data[[1]]
     validation_data <- all_data[[2]]
 
-    ar_param <- data %>%
+    ar_param <- validation_data %>%
         group_split(Postcode) %>%
         compute_ar_param_() %>%
         max()
-
 
     spde <- build_mesh_and_spde(data, x_col, y_col, time_col)
 
