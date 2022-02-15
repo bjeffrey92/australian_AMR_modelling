@@ -73,18 +73,16 @@ plot_time_series <- function(species) {
     }
 }
 
-species_ab_combos <- list(
-    c("Ecoli", "AMPI"),
-    c("Ecoli", "AUGM"),
-    c("Ecoli", "CLEX"),
-    c("Ecoli", "NORF"),
-    c("Ecoli", "TRIM"),
-    c("Staph", "CFOX"),
-    c("Staph", "ERYT"),
-    c("Staph", "MUPI"),
-    c("Staph", "PENI"),
-    c("Staph", "TETR")
+
+ecoli_abs <- c("AMPI", "AUGM", "CLEX", "TRIM")
+staph_abs <- c("ERYT", "MUPI", "PENI", "TETR")
+
+
+species_ab_combos <- c(
+    lapply(ecoli_abs, function(x) c("Ecoli", x)),
+    lapply(staph_abs, function(x) c("Staph", x))
 )
+
 
 validate_data <- function(df) {
     df <- drop_locs_with_missing(df)

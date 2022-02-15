@@ -94,7 +94,7 @@ format_results <- function(result, ordered_forecasts = NULL) {
     rename_forecast_types <- function(f_types) {
         return(sapply(
             str_split(f_types, "_"),
-            function(x) paste(head(x, 2), collapse = " ")
+            function(x) toupper(x[1])
         ))
     }
     result$forecast_type <- rename_forecast_types(result$forecast_type)
@@ -116,14 +116,18 @@ plot_result <- function(result, species, ab,
     result <- format_results(result, ordered_forecasts)
     p <- ggplot(
         result,
-        aes(x = forecast_type, y = error, fill = forecast_type)
+        aes(
+            x = forecast_type,
+            y = error,
+            # group = interaction(forecast_type, Forecasting_Horizon),
+            fill = Forecasting_Horizon
+        )
     ) +
         geom_boxplot() +
-        theme(
-            # text = element_text(size = 22),
-            axis.text.x = element_text(angle = 60, hjust = 1)
-        ) +
-        theme_minimal()
+        theme_minimal() +
+        theme(legend.position = "none") +
+        xlab("Forecast Type") +
+        ylab("Forecast Error")
     if (save) {
         ggsave(sprintf("%s_%s_forecast_accuracy.png", species, ab),
             plot = p,
@@ -143,7 +147,7 @@ order_forecast_accuracies <- function(result) {
 }
 
 
-plot_time_series <- function(df, ab, result) {
+plot_time_series <- function(df, ab, forecast_horizon) {
     df <- df[df$Antibiotic == ab, ]
     df <- df[order(df$Year_Quarter), ]
     p <- ggplot(
@@ -152,9 +156,13 @@ plot_time_series <- function(df, ab, result) {
     ) +
         geom_line() +
         geom_point() +
+        geom_vline(
+            xintercept = max(df$Year_Quarter) - forecast_horizon,
+            linetype = "dashed"
+        ) +
         theme_minimal() +
         xlab("Date") +
-        ylab("Percent Resistant")
+        ylab("Total % Resistant")
     return(p)
 }
 
@@ -183,35 +191,39 @@ time_series_accuracy_plotter <- function(species, ab) {
         aggregate_freq
     )
     aggregated_data <- do.call(rbind, aggregated_data)
-    time_series_plot <- plot_time_series(aggregated_data)
+    forecast_horizon <- max(result$Forecasting_Horizon)
+    time_series_plot <- plot_time_series(aggregated_data, ab, forecast_horizon)
+    return(list(time_series_plot, accuracy_plot))
 }
+time_series_accuracy_plotter <- Vectorize(time_series_accuracy_plotter, c("ab"))
 
 
-panel_plots <- function(species, abs) {
-
-}
-
-
-
-for (i in species_ab_combos) {
-    species <- i[[1]]
-    ab <- i[[2]]
-    tryCatch(
-        expr = {
-            result <- load_results(
-                species,
-                ab,
-                inla_likelihood = "beta",
-                percentage_correction = TRUE
-            )
-            result$error <- abs(result$Perc.R - result$forecast)
-            plot_result(result, species, ab)
-        },
-        error = function(e) {
-            print(e)
-            sprintf(
-                "Failed for %s %s", species, ab
-            )
-        }
+panel_plots <- function(species, abs_list) {
+    plots <- time_series_accuracy_plotter(species, abs_list)
+    plots <- c(
+        lapply(plots[1:6], function(x) x + xlab("")), plots[7:8]
+    )
+    if (species == "Ecoli") {
+        species_ <- "E. coli"
+    } else if (species == "Staph") {
+        species_ <- "S. aureus"
+    }
+    panel_plot <- cowplot::plot_grid(
+        plotlist = plots,
+        ncol = 2,
+        labels = c(
+            rbind(paste(sprintf("%s -", species_), abs_list), rep("", 4))
+        ),
+        label_x = 0.1,
+        label_y = 1.1,
+        label_size = 9
+    ) +
+        theme(plot.margin = margin(20))
+    ggsave(sprintf("%s_forecast_panel_plot.png", species),
+        plot = panel_plot
     )
 }
+
+
+panel_plots("Ecoli", ecoli_abs)
+panel_plots("Staph", staph_abs)
