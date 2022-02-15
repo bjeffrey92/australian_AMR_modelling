@@ -4,6 +4,8 @@ library(cowplot)
 library(ggplot2)
 library(tidyr)
 library(stringr)
+library(ggpubr)
+
 
 load_inla_result <- function(species, ab, likelihood, percentage_correction = FALSE) {
     inla_results <- readRDS(
@@ -125,7 +127,7 @@ plot_result <- function(result, species, ab,
     ) +
         geom_boxplot() +
         theme_minimal() +
-        theme(legend.position = "none") +
+        theme(legend.position = "bottom") +
         xlab("Forecast Type") +
         ylab("Forecast Error")
     if (save) {
@@ -198,8 +200,15 @@ time_series_accuracy_plotter <- function(species, ab) {
 time_series_accuracy_plotter <- Vectorize(time_series_accuracy_plotter, c("ab"))
 
 
-panel_plots <- function(species, abs_list) {
+panel_plots <- function(species, abs_list, save_legend = FALSE) {
     plots <- time_series_accuracy_plotter(species, abs_list)
+
+    if (save_legend) {
+        legend <- cowplot::get_legend(plots[[2]]) %>% as_ggplot()
+        ggsave("legend.png", plot = legend)
+    }
+    plots <- lapply(plots, function(x) x + theme(legend.position = "none"))
+
     plots <- c(
         lapply(plots[1:6], function(x) x + xlab("")), plots[7:8]
     )
@@ -208,6 +217,7 @@ panel_plots <- function(species, abs_list) {
     } else if (species == "Staph") {
         species_ <- "S. aureus"
     }
+
     panel_plot <- cowplot::plot_grid(
         plotlist = plots,
         ncol = 2,
@@ -219,6 +229,7 @@ panel_plots <- function(species, abs_list) {
         label_size = 9
     ) +
         theme(plot.margin = margin(20))
+
     ggsave(sprintf("%s_forecast_panel_plot.png", species),
         plot = panel_plot
     )
