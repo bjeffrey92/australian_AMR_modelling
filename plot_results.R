@@ -236,5 +236,45 @@ panel_plots <- function(species, abs_list, save_legend = FALSE) {
 }
 
 
+load_spatial_field <- function(ab, species, likelihood = "beta") {
+    inla_results <- readRDS(
+        sprintf(
+            "results/inla/inla_result_%s_likelihood_%s_%s.rds",
+            likelihood,
+            species,
+            ab
+        )
+    )
+    hyperparams <- inla_results$mod_mode$summary.hyperpar
+    theta <- hyperparams[2:3, 3:5]
+    theta$significant <- apply(theta > 0, 1, function(x) var(x) == 0)
+    theta <- theta %>%
+        mutate(asterisk = case_when(
+            significant ~ "*",
+            !significant ~ ""
+        ))
+    theta[1:3] <- theta[1:3] %>% round(2)
+    return(
+        sprintf(
+            "%s (%s)%s",
+            theta[[2]],
+            paste(theta[[1]], theta[[3]], sep = "-"),
+            theta[[5]]
+        )
+    )
+}
+
+
+tabulate_spatial_effect <- function(species, abs_list) {
+    spatial_effects <- lapply(abs_list, load_spatial_field, species)
+    names(spatial_effects) <- abs_list
+    df <- as.data.frame(do.call(rbind, spatial_effects))
+    names(df) <- c("Theta_1", "Theta_2")
+    write.csv(df, sprintf("%s_spatial_effects.csv", species))
+}
+
+
 panel_plots("Ecoli", ecoli_abs)
 panel_plots("Staph", staph_abs)
+tabulate_spatial_effect("Ecoli", ecoli_abs)
+tabulate_spatial_effect("Staph", staph_abs)
