@@ -245,21 +245,36 @@ load_spatial_field <- function(ab, species, likelihood = "beta") {
             ab
         )
     )
-    hyperparams <- inla_results$mod_mode$summary.hyperpar
-    theta <- hyperparams[2:3, 3:5]
-    theta$significant <- apply(theta > 0, 1, function(x) var(x) == 0)
-    theta <- theta %>%
+    result_field <- inla.spde.result(
+        inla_results$mod_mode,
+        "field",
+        inla_results$spde,
+        do.transform = TRUE
+    )
+    return(
+        exp(rbind(
+            result_field$summary.log.range.nominal,
+            result_field$summary.log.variance.nominal
+        ))
+    )
+}
+
+
+extract_range_and_var <- function(params) {
+    params <- params[c(5, 4, 6)]
+    params$significant <- apply(params > 0, 1, function(x) var(x) == 0)
+    params <- params %>%
         mutate(asterisk = case_when(
             significant ~ "*",
             !significant ~ ""
         ))
-    theta[1:3] <- theta[1:3] %>% round(2)
+    params[1:3] <- params[1:3] %>% round(2)
     return(
         sprintf(
             "%s (%s)%s",
-            theta[[2]],
-            paste(theta[[1]], theta[[3]], sep = "-"),
-            theta[[5]]
+            params[[1]],
+            paste(params[[2]], params[[3]], sep = "-"),
+            params[[5]]
         )
     )
 }
@@ -267,9 +282,20 @@ load_spatial_field <- function(ab, species, likelihood = "beta") {
 
 tabulate_spatial_effect <- function(species, abs_list) {
     spatial_effects <- lapply(abs_list, load_spatial_field, species)
-    names(spatial_effects) <- abs_list
-    df <- as.data.frame(do.call(rbind, spatial_effects))
-    names(df) <- c("Theta_1", "Theta_2")
+    spatial_effects <- do.call("rbind", spatial_effects)
+    spatial_effects <- spatial_effects[order(row.names(spatial_effects)), ]
+    range_and_var <- extract_range_and_var(spatial_effects)
+    range_and_var <-
+        cbind(
+            head(range_and_var, length(abs_list)),
+            tail(range_and_var, length(abs_list))
+        )
+    df <- as.data.frame(
+        range_and_var,
+        row.names = abs_list,
+    )
+    names(df) <- c("range", "variance")
+    df$variance <- str_replace(df$variance, "\\*", "")
     write.csv(df, sprintf("%s_spatial_effects.csv", species))
 }
 
