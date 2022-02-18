@@ -67,7 +67,25 @@ clip_predictions <- function(predictions, min = 0, max = 100) {
 }
 
 
-load_results <- function(species, ab, inla_likelihood, percentage_correction = FALSE) {
+apply_ensembling <- function(df, ensemble_model) {
+    ensemble_rows <-
+        df[
+            Vectorize(startsWith, c("prefix"))
+            (df$forecast_type, ensemble_model) %>% apply(1, any),
+        ]
+    ensemble_rows$forecast_type <- "ensemble_forecast"
+    ensemble_rows$forecast <- mean(ensemble_rows$forecast)
+    return(
+        ensemble_rows[1, ]
+    )
+}
+
+
+load_results <- function(species,
+                         ab,
+                         inla_likelihood,
+                         percentage_correction = FALSE,
+                         ensemble_model = c()) {
     ts_result <- load_ts_result(species, ab)
     inla_result <- load_inla_result(
         species,
@@ -88,6 +106,17 @@ load_results <- function(species, ab, inla_likelihood, percentage_correction = F
         values_to = "forecast"
     )
     result$forecast <- clip_predictions(result$forecast)
+
+    if (length(ensemble_model) > 0) {
+        ensemble_results <-
+            result %>%
+            group_split(Location, Forecasting_Horizon) %>%
+            lapply(apply_ensembling, ensemble_model)
+        ensemble_results <- do.call("rbind", ensemble_results)
+        result <- rbind(as.data.frame(result), ensemble_results)
+    }
+
+    result$error <- abs(result$Perc.R - result$forecast)
     return(result)
 }
 
@@ -176,7 +205,6 @@ time_series_accuracy_plotter <- function(species, ab) {
         inla_likelihood = "beta",
         percentage_correction = TRUE
     )
-    result$error <- abs(result$Perc.R - result$forecast)
 
     ordered_forecasts <- order_forecast_accuracies(result)
     accuracy_plot <- plot_result(
@@ -297,6 +325,76 @@ tabulate_spatial_effect <- function(species, abs_list) {
     names(df) <- c("range", "variance")
     df$variance <- str_replace(df$variance, "\\*", "")
     write.csv(df, sprintf("%s_spatial_effects.csv", species))
+}
+
+
+add_ab_and_species <- function(results, abs_list, species) {
+    row_counts <- sapply(results, nrow)
+    results <- do.call("rbind", results)
+    results$species <- species
+    results$ab <- rep(abs_list, row_counts)
+    return(results[results$forecast_type == "inla_forecast", ])
+}
+
+
+corr_plot <- function(df, var) {
+    return(ggplot(data = df) +
+        geom_point(aes(x = mean, y = error)) +
+        theme_minimal() +
+        xlab(var) +
+        ylab("Average Forecast Error"))
+}
+
+
+inla_corr_plot <- function(ecoli_abs, staph_abs) {
+    eco_spatial_effects <- lapply(ecoli_abs, load_spatial_field, "Ecoli")
+    sau_spatial_effects <- lapply(staph_abs, load_spatial_field, "Staph")
+    spatial_effects <- do.call(
+        "rbind",
+        c(eco_spatial_effects, sau_spatial_effects)
+    )
+    spatial_effects$param <- row.names(spatial_effects)
+    spatial_effects <- spatial_effects[order(spatial_effects$param), ]
+    spatial_effects$species <- c(rep("Ecoli", 4), rep("Staph", 4))
+    spatial_effects$ab <- c(ecoli_abs, staph_abs)
+    spatial_effects$param <- str_split(spatial_effects$param, "\\.", simplify = TRUE)[, 1]
+
+    ecoli_results <- lapply(
+        ecoli_abs,
+        load_results,
+        species = "Ecoli",
+        inla_likelihood = "beta",
+        percentage_correction = TRUE
+    ) %>% add_ab_and_species(ecoli_abs, "Ecoli")
+    staph_results <- lapply(
+        staph_abs,
+        load_results,
+        species = "Staph",
+        inla_likelihood = "beta",
+        percentage_correction = TRUE
+    ) %>% add_ab_and_species(staph_abs, "Staph")
+    all_results <- rbind(ecoli_results, staph_results)
+    results <- all_results %>%
+        group_split(species, ab) %>%
+        sapply(function(x) c(mean(x$error), x$species[[1]], x$ab[[1]])) %>%
+        t() %>%
+        as.data.frame()
+    names(results) <- c("error", "species", "ab")
+
+    df <- merge(results, spatial_effects)
+    df$mean <- as.numeric(df$mean)
+    df$error <- as.numeric(as.character(df$error))
+    range_df <- df[df$param == "range", ]
+    var_df <- df[df$param == "variance", ]
+
+    p <- cowplot::plot_grid(
+        corr_plot(range_df, "Range"),
+        corr_plot(var_df, "Variance"),
+        nrow = 1
+    )
+    ggsave("range_var_inla_accuracy_plot.png",
+        plot = p
+    )
 }
 
 
