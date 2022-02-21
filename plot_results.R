@@ -398,6 +398,70 @@ inla_corr_plot <- function(ecoli_abs, staph_abs) {
 }
 
 
+ensemble_violinplot <- function(df) {
+    best_other_forecast <- 
+        order_forecast_accuracies(
+            df[df$forecast_type != "ensemble_forecast",]
+        )[[1]]
+    df <- 
+        df[
+            df$forecast_type %in%
+            c(best_other_forecast, "ensemble_forecast"),
+        ]
+    result <- format_results(df, c(best_other_forecast, "ensemble_forecast"))
+    p <- ggplot(
+        result,
+        aes(
+            x = forecast_type,
+            y = error,
+        )
+    ) +
+        geom_violin(draw_quantiles = 0.5) +
+        theme_minimal() +
+        theme(legend.position = "none") +
+        xlab("Forecast Type") +
+        ylab("Forecast Error")
+    return(p)
+}
+
+
+ensemble_panel_plots <- function(ensemble_model = c("arima", "ets")) {
+    get_results <- function(species, abs_list) {
+        return(
+            lapply(
+                abs_list,
+                function(x)
+                    load_results(
+                        species,
+                        x,
+                        inla_likelihood = "beta",
+                        percentage_correction = TRUE,
+                        ensemble_model = ensemble_model)
+                    %>% mutate(ab = x)
+            )
+        )
+    }
+    results <- c(
+        get_results("Ecoli", ecoli_abs),
+        get_results("Staph", staph_abs)
+    )
+    plot_list <- lapply(results, ensemble_violinplot)
+    panel_plot <- cowplot::plot_grid(
+        plotlist = plot_list,
+        ncol = 2,
+        labels =  c(
+            paste("Ecoli", ecoli_abs, sep = "-"),
+            paste("Staph", staph_abs, sep = "-")
+        ),
+        label_x = 0.1,
+        label_y = 1.1,
+        label_size = 9
+    ) +
+        theme(plot.margin = margin(20))
+    ggsave("forecast_ensemble_plot.png", plot = panel_plot)
+}
+
+
 panel_plots("Ecoli", ecoli_abs)
 panel_plots("Staph", staph_abs)
 tabulate_spatial_effect("Ecoli", ecoli_abs)
