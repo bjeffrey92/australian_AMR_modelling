@@ -137,7 +137,10 @@ format_results <- function(result, ordered_forecasts = NULL) {
                 ordered = TRUE
             )
     }
+    result$Forecasting_Horizon <- result$Forecasting_Horizon * 12
     result$Forecasting_Horizon <- as.factor(result$Forecasting_Horizon)
+    names(result)[names(result) == "Forecasting_Horizon"] <-
+        "Forecasting Horizon (months)"
     return(result)
 }
 
@@ -147,11 +150,10 @@ plot_result <- function(result, species, ab,
     result <- format_results(result, ordered_forecasts)
     p <- ggplot(
         result,
-        aes(
-            x = forecast_type,
-            y = error,
-            # group = interaction(forecast_type, Forecasting_Horizon),
-            fill = Forecasting_Horizon
+        aes_string(
+            x = "forecast_type",
+            y = "error",
+            fill = "`Forecasting Horizon (months)`"
         )
     ) +
         geom_boxplot() +
@@ -234,6 +236,7 @@ panel_plots <- function(species, abs_list, save_legend = FALSE) {
     if (save_legend) {
         legend <- cowplot::get_legend(plots[[2]]) %>% as_ggplot()
         ggsave("legend.png", plot = legend)
+        return(NULL)
     }
     plots <- lapply(plots, function(x) x + theme(legend.position = "none"))
 
