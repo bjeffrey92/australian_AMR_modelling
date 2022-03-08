@@ -30,7 +30,20 @@ run_forecasts <- function(data, organism, output_file, PI = 95) {
 }
 
 
-main <- function(species, ab, prediction_steps = 4) {
+aggregate_locations <- function(df) {
+    row <- df[1, ]
+    row$Postcode <- -999
+    row$lat <- 0
+    row$long <- 0
+    row$R <- sum(df$R)
+    row$S <- sum(df$S)
+    row$totalFreq <- sum(df$totalFreq)
+    row$Perc.R <- row$R / row$totalFreq * 100
+    return(row)
+}
+
+
+main <- function(species, ab, prediction_steps = 4, aggregate = FALSE) {
     df <- cache_load_data(species)
     df <- df[df$Antibiotic == ab, ]
 
@@ -39,6 +52,10 @@ main <- function(species, ab, prediction_steps = 4) {
         return(FALSE)
     }
     output_file <- sprintf("time_series_result_%s_%s.tsv", species, ab)
+    if (aggregate) {
+        df <- do.call("rbind", by(df, df$Year_Quarter, aggregate_locations))
+    }
+    output_file <- paste0("aggregated_", output_file)
     write_output_file_headers(output_file, forecasting_functions)
     for (i in group_split(df, Postcode)) {
         run_forecasts(i, species, output_file = output_file)
