@@ -5,6 +5,8 @@ library(ggplot2)
 library(tidyr)
 library(stringr)
 library(ggpubr)
+library(GGally)
+library(viridis)
 
 
 load_inla_result <- function(species, ab, likelihood, percentage_correction = FALSE) {
@@ -462,6 +464,53 @@ ensemble_panel_plots <- function(ensemble_model = c("arima", "ets")) {
     ) +
         theme(plot.margin = margin(20))
     ggsave("forecast_ensemble_plot.png", plot = panel_plot)
+}
+
+
+sort_inla_accuracies <- function(species, ab) {
+    inla_result <- load_inla_result(
+        species,
+        ab,
+        likelihood = "beta",
+        percentage_correction = TRUE
+    )
+    inla_result$error <- abs(
+        inla_result$inla_forecast - inla_result$Perc.R
+    )
+    location_errors <- 
+        inla_result %>%
+            group_by(Location) %>%
+            summarise_at(vars(error), mean)
+    location_errors <- location_errors[order(location_errors$error), ]
+    location_errors$ordinal_error <- as.numeric(as.factor(location_errors$error))
+    location_errors$species <- species
+    location_errors$ab <- ab
+    return(location_errors)
+}
+
+
+plot_location_accuracies <- function(species, abs_list) {
+    data <- do.call(
+        "rbind",
+        lapply(abs_list, function(x) sort_inla_accuracies(species, x))
+    )
+    wide_data <- pivot_wider(
+        data,
+        names_from = "ab",
+        id_cols = "Location",
+        values_from = "ordinal_error"
+    )
+    wide_data$Location <- as.factor(wide_data$Location)
+    p <- ggparcoord(wide_data,
+            columns = 2:5, groupColumn = 1, order = "anyClass",
+            showPoints = TRUE,
+            alphaLines = 0.3,
+            title = paste(species, "error per location")
+    ) +
+    scale_color_viridis(discrete = TRUE) +
+    xlab("Antibiotic") +
+    ylab("Mean Absolute Error")
+    ggsave(sprintf("%s_location_acc_plot.png", species), p)
 }
 
 
