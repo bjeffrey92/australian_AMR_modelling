@@ -182,15 +182,39 @@ order_forecast_accuracies <- function(result) {
 }
 
 
-plot_time_series <- function(df, ab, forecast_horizon) {
+load_aggregated_results <- function(species, ab, models = c("arima", "ets")) {
+    df <-  read.csv(
+        sprintf(
+            "results/aggregated_locations_results/aggregated_time_series_result_%s_%s.tsv",
+            species,
+            ab
+        ),
+        sep = "\t"
+    )
+    parse_model_fc <- function(model) {
+        fc <- df[, paste0(model, "_forecast_forecast")]
+        fc_upper <- sapply(
+            fc + df[, paste0(model, "_forecast_PI_Width")]/2,
+            function(x) min(x, 100)
+        )
+        fc_lower <- sapply(
+            fc - df[, paste0(model, "_forecast_PI_Width")]/2,
+            function(x) max(x, 0)
+        )
+        return(data.frame(fc, fc_upper, fc_lower, model))
+    }
+    return(lapply(models, parse_model_fc))
+}
+
+
+plot_time_series <- function(df, ab, forecast_horizon, species, plot_fits = TRUE) {
     df <- df[df$Antibiotic == ab, ]
     df <- df[order(df$Year_Quarter), ]
-    p <- ggplot(
-        df,
-        aes(x = Year_Quarter, y = totalFreq)
-    ) +
-        geom_line() +
-        geom_point() +
+    p <- ggplot() +
+        geom_line(data = df,
+            aes(x = Year_Quarter, y = totalFreq)) +
+        geom_point(data = df,
+            aes(x = Year_Quarter, y = totalFreq)) +
         geom_vline(
             xintercept = max(df$Year_Quarter) - forecast_horizon,
             linetype = "dashed"
@@ -198,6 +222,31 @@ plot_time_series <- function(df, ab, forecast_horizon) {
         theme_minimal() +
         xlab("Date") +
         ylab("Total % Resistant")
+    if (plot_fits) {
+        forecasts <- load_aggregated_results(species, ab)
+        dates <- as.yearqtr(
+            seq(df$Year_Quarter[[nrow(df) - 4]],
+                df$Year_Quarter[[nrow(df) - 4]] + 1, 0.25
+            )
+        )
+        last_value <- rep(df$totalFreq[[nrow(df) - forecast_horizon * 4]], 4)
+        for (model_fc in forecasts) {
+            if (model_fc$model[[1]] == "ets") {
+                col <- "red"
+            } else if (model_fc$model[[1]] == "arima") {
+               col <- "blue"
+            }
+            model_fc <- rbind(last_value, model_fc)
+            model_fc$Year_Quarter <- dates
+            p <- p +
+                geom_line(data = model_fc,
+                    aes(x = Year_Quarter, y = fc), col = col) +
+                geom_ribbon(data = model_fc,
+                    aes(x = Year_Quarter, ymin = fc_lower, ymax = fc_upper),
+                    alpha = 0.1,
+                    fill = col)
+        }
+    }
     return(p)
 }
 
@@ -226,7 +275,12 @@ time_series_accuracy_plotter <- function(species, ab) {
     )
     aggregated_data <- do.call(rbind, aggregated_data)
     forecast_horizon <- max(result$Forecasting_Horizon)
-    time_series_plot <- plot_time_series(aggregated_data, ab, forecast_horizon)
+    time_series_plot <- plot_time_series(
+        aggregated_data,
+        ab,
+        forecast_horizon,
+        species
+    )
     return(list(time_series_plot, accuracy_plot))
 }
 time_series_accuracy_plotter <- Vectorize(time_series_accuracy_plotter, c("ab"))
@@ -264,7 +318,7 @@ panel_plots <- function(species, abs_list, save_legend = FALSE) {
         theme(plot.margin = margin(20))
 
     ggsave(sprintf("%s_forecast_panel_plot.png", species),
-        plot = panel_plot
+        plot = panel_plot, bg = "white"
     )
 }
 
