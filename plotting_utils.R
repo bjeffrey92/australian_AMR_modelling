@@ -142,6 +142,7 @@ load_results <- function(species,
     result$error <- abs(result$Perc.R - result$forecast)
     return(result)
 }
+load_results_vec <- Vectorize(load_results, c("ab"))
 
 
 format_results <- function(result, ordered_forecasts = NULL) {
@@ -176,12 +177,9 @@ order_forecast_accuracies <- function(result) {
 }
 
 
-load_aggregated_results <- function(
-    species,
-    ab,
-    models = c("inla", "arima", "ets")
-) {
-
+load_aggregated_results <- function(species,
+                                    ab,
+                                    models = c("inla", "arima", "ets")) {
     df <- read.csv(
         sprintf(
             "results/aggregated_locations_results/aggregated_time_series_result_%s_%s.tsv",
@@ -225,7 +223,7 @@ load_aggregated_results <- function(
             )
         df$model <- "inla"
         df <- as.data.frame(df)
-        data[[length(data) + 1]] <-  df[,c("fc", "fc_upper", "fc_lower", "model")]
+        data[[length(data) + 1]] <- df[, c("fc", "fc_upper", "fc_lower", "model")]
     }
     return(data)
 }

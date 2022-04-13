@@ -1,4 +1,5 @@
 source("EDA.R")
+source("plotting_utils.R")
 
 library(cowplot)
 library(ggplot2)
@@ -9,8 +10,14 @@ library(GGally)
 library(viridis)
 
 
-plot_result <- function(result, species, ab,
-                        ordered_forecasts = NULL, save = TRUE) {
+plot_result <- function(
+    result,
+    species,
+    ab,
+    ordered_forecasts = NULL,
+    save = TRUE,
+    axis_max = NULL
+) {
     result <- format_results(result, ordered_forecasts)
     p <- ggplot(
         result,
@@ -25,6 +32,9 @@ plot_result <- function(result, species, ab,
         theme(legend.position = "bottom") +
         xlab("Forecast Type") +
         ylab("Forecast Error")
+    if (!is.null(axis_max)) {
+        p <- p + scale_y_continuous(limits = c(0, axis_max))
+    }
     if (save) {
         ggsave(sprintf("%s_%s_forecast_accuracy.png", species, ab),
             plot = p,
@@ -33,6 +43,7 @@ plot_result <- function(result, species, ab,
         return(p)
     }
 }
+
 
 
 plot_time_series <- function(df, ab, forecast_horizon, species, plot_fits = TRUE) {
@@ -63,6 +74,8 @@ plot_time_series <- function(df, ab, forecast_horizon, species, plot_fits = TRUE
                 col <- "red"
             } else if (model_fc$model[[1]] == "arima") {
                col <- "blue"
+            } else if (model_fc$model[[1]] == "inla") {
+                col <- "green"
             }
             model_fc <- rbind(last_value, model_fc)
             model_fc$Year_Quarter <- dates
@@ -80,6 +93,21 @@ plot_time_series <- function(df, ab, forecast_horizon, species, plot_fits = TRUE
 
 
 time_series_accuracy_plotter <- function(species, ab) {
+    if (species == "Ecoli") {
+        abs_list <- ecoli_abs
+    } else if (species == "Staph") {
+        abs_list <- staph_abs
+    }
+
+    all_results <- load_results_vec(
+            species,
+            abs_list,
+            inla_likelihood = "beta",
+            percentage_correction = TRUE
+    )
+    max_error <- max(do.call(c, all_results["error", ]))
+    axis_max <- plyr::round_any(max_error, 10, f = ceiling)
+
     result <- load_results(
         species,
         ab,
@@ -93,7 +121,8 @@ time_series_accuracy_plotter <- function(species, ab) {
         species,
         ab,
         ordered_forecasts = ordered_forecasts,
-        save = FALSE
+        save = FALSE,
+        axis_max = axis_max
     )
 
     time_series_data <- cache_load_data(species)
