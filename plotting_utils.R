@@ -1,6 +1,13 @@
 source("EDA.R")
 
-load_inla_result <- function(species, ab, likelihood, percentage_correction = FALSE) {
+library(INLA)
+
+load_inla_result <- function(species,
+                             ab,
+                             likelihood,
+                             percentage_correction = FALSE,
+                             total_freq = FALSE,
+                             get_PI = FALSE) {
     inla_results <- readRDS(
         sprintf(
             "results/inla/inla_result_%s_likelihood_%s_%s.rds",
@@ -9,6 +16,8 @@ load_inla_result <- function(species, ab, likelihood, percentage_correction = FA
             ab
         )
     )
+
+
     validation_data <- inla_results$all_data[
         inla_results$all_data$train_test == "test",
     ]
@@ -29,6 +38,27 @@ load_inla_result <- function(species, ab, likelihood, percentage_correction = FA
         "Forecasting_Horizon",
         "Perc.R"
     )
+    if (total_freq) {
+        headers <- c(headers, "totalFreq")
+    }
+    if (get_PI) {
+        index_pred <- inla.stack.index(inla_results$stack, "pred")$data
+        val_preds_upper <- inla_results$mod_mode$summary.fitted.val[
+            index_pred, "0.975quant"
+        ]
+        val_preds_lower <- inla_results$mod_mode$summary.fitted.val[
+            index_pred, "0.025quant"
+        ]
+        validation_data$fc_upper <- val_preds_upper
+        validation_data$fc_lower <- val_preds_lower
+
+        if (percentage_correction) {
+            validation_data$fc_upper <- validation_data$fc_upper * 100
+            validation_data$fc_lower <- validation_data$fc_lower * 100
+        }
+
+        headers <- c(headers, "fc_upper", "fc_lower")
+    }
     return(validation_data[
         ,
         headers
@@ -146,7 +176,12 @@ order_forecast_accuracies <- function(result) {
 }
 
 
-load_aggregated_results <- function(species, ab, models = c("arima", "ets")) {
+load_aggregated_results <- function(
+    species,
+    ab,
+    models = c("inla", "arima", "ets")
+) {
+
     df <- read.csv(
         sprintf(
             "results/aggregated_locations_results/aggregated_time_series_result_%s_%s.tsv",
@@ -167,7 +202,32 @@ load_aggregated_results <- function(species, ab, models = c("arima", "ets")) {
         )
         return(data.frame(fc, fc_upper, fc_lower, model))
     }
-    return(lapply(models, parse_model_fc))
+    data <- lapply(models[models != "inla"], parse_model_fc)
+
+    if ("inla" %in% models) {
+        inla_result <- load_inla_result(
+            species,
+            ab,
+            "beta",
+            percentage_correction = FALSE,
+            total_freq = TRUE,
+            get_PI = TRUE
+        )
+
+        aggregate_col <- function(totalFreq, col) {
+            return(sum(col * totalFreq) / sum(totalFreq) * 100)
+        }
+        df <- group_by(inla_result, Forecasting_Horizon) %>%
+            summarise(
+                fc_upper = aggregate_col(totalFreq, fc_upper),
+                fc_lower = aggregate_col(totalFreq, fc_lower),
+                fc = aggregate_col(totalFreq, inla_forecast)
+            )
+        df$model <- "inla"
+        df <- as.data.frame(df)
+        data[[length(data) + 1]] <-  df[,c("fc", "fc_upper", "fc_lower", "model")]
+    }
+    return(data)
 }
 
 
