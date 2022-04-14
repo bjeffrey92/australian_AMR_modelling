@@ -143,14 +143,11 @@ time_series_accuracy_plotter <- function(species, ab) {
 time_series_accuracy_plotter <- Vectorize(time_series_accuracy_plotter, c("ab"))
 
 
-panel_plots <- function(species, abs_list, save_legend = FALSE) {
+panel_plots <- function(species, abs_list) {
     plots <- time_series_accuracy_plotter(species, abs_list)
 
-    if (save_legend) {
-        legend <- cowplot::get_legend(plots[[2]]) %>% as_ggplot()
-        ggsave("legend.png", plot = legend)
-        return(NULL)
-    }
+    legend <- cowplot::get_legend(plots[[2]]) %>% as_ggplot()
+
     plots <- lapply(plots, function(x) x + theme(legend.position = "none"))
 
     plots <- c(
@@ -173,6 +170,8 @@ panel_plots <- function(species, abs_list, save_legend = FALSE) {
         label_size = 9
     ) +
         theme(plot.margin = margin(20))
+
+    panel_plot <- plot_grid(panel_plot, legend, nrow =  2, rel_heights = c(1, .03))
 
     ggsave(sprintf("%s_forecast_panel_plot.png", species),
         plot = panel_plot, bg = "white"
@@ -380,7 +379,7 @@ plot_location_accuracies <- function(species, abs_list) {
         data,
         names_from = "ab",
         id_cols = "Location",
-        values_from = "ordinal_error"
+        values_from = "error"
     )
     wide_data$Location <- as.factor(wide_data$Location)
     p <- ggparcoord(wide_data,
@@ -396,7 +395,111 @@ plot_location_accuracies <- function(species, abs_list) {
 }
 
 
+single_location_plot <- function(df, forecasting_horizon) {
+    df <- as.data.frame(df)
+
+    p <- ggplot() +
+        geom_line(data = df,
+            aes(x = Year_Quarter, y = Perc.R.x)) +
+        geom_vline(
+            xintercept = max(df$Year_Quarter) - forecasting_horizon / 4,
+            linetype = "dashed"
+        ) +
+        theme_minimal() +
+        xlab("Date") +
+        ylab("Total % Resistant")
+
+    last_date <-  max(df$Year_Quarter) - forecasting_horizon / 4
+
+    for (model in c("ets", "arima", "inla")) {
+        if (model == "ets") {
+            col <- "red"
+        } else if (model == "arima") {
+            col <- "blue"
+        } else if (model == "inla") {
+            col <- "green"
+        }
+        df[df$Year_Quarter == last_date, startsWith(names(df), model)] <-
+             rep(df[df$Year_Quarter == last_date, ]$Perc.R.x, 3)
+
+        p <- p +
+            geom_line(
+                data = df,
+                aes_string(
+                    x = "Year_Quarter",
+                    y = sprintf("%s_forecast_forecast", model)
+                ),
+                col = col
+            ) +
+            geom_ribbon(
+                data = df,
+                aes_string(
+                    x = "Year_Quarter",
+                    ymin = sprintf("%s_forecast_lower", model),
+                    ymax = sprintf("%s_forecast_upper", model)
+                ),
+                alpha = 0.1,
+                fill = col)
+    }
+    return(p)
+}
+
+
+multi_location_panel_plots <- function(species, ab, forecasting_horizon = 4) {
+    inla_result <- load_inla_result(
+        species,
+        ab,
+        inla_likelihood,
+        percentage_correction = TRUE,
+        get_PI = TRUE
+    )
+    names(inla_result)[names(inla_result) == "inla_forecast"] <-
+        "inla_forecast_forecast"
+    names(inla_result)[names(inla_result) == "fc_upper"] <-
+        "inla_forecast_upper"
+    names(inla_result)[names(inla_result) == "fc_lower"] <-
+        "inla_forecast_lower"
+    ts_result <- load_ts_result(species, ab, get_PI = TRUE)
+
+    all_forecasts <- merge(ts_result, inla_result)
+
+    time_series_data <- cache_load_data(species)
+    time_series_data <- time_series_data[
+        time_series_data$Antibiotic == ab &
+        time_series_data$Postcode %in% all_forecasts$Location,
+    ]
+    forecasted_dates <- tail(
+        unique(time_series_data$Year_Quarter),
+        forecasting_horizon
+    )
+    forecasted_dates <- sort(forecasted_dates)
+    df <- data.frame(1:forecasting_horizon * 0.25, forecasted_dates)
+    names(df) <- c("Forecasting_Horizon", "Year_Quarter")
+    all_forecasts <- merge(all_forecasts, df)
+
+    data <- merge(
+        time_series_data,
+        all_forecasts,
+        all.x = TRUE,
+        by.x = c("Postcode", "Year_Quarter"),
+        by.y = c("Location", "Year_Quarter")
+    )
+    data <- data[data$Year_Quarter > median(data$Year_Quarter), ]
+
+    p <- single_location_plot(data, forecasting_horizon)
+    panel_plot <- p + facet_wrap(vars(Postcode), ncol = 3) +
+        theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+    ggsave(sprintf("%s_%s_location_forecasts.png", species, ab),
+        plot = panel_plot, bg = "white"
+    )
+}
+
+
 panel_plots("Ecoli", ecoli_abs)
 panel_plots("Staph", staph_abs)
-tabulate_spatial_effect("Ecoli", ecoli_abs)
-tabulate_spatial_effect("Staph", staph_abs)
+for (ab in ecoli_abs) {
+    multi_location_panel_plots("Ecoli", ab)
+}
+for (ab in staph_abs) {
+    multi_location_panel_plots("Staph", ab)
+}

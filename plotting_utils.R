@@ -1,6 +1,7 @@
 source("EDA.R")
 
 library(INLA)
+library(stringr)
 
 load_inla_result <- function(species,
                              ab,
@@ -66,7 +67,7 @@ load_inla_result <- function(species,
 }
 
 
-load_ts_result <- function(species, ab) {
+load_ts_result <- function(species, ab, get_PI = FALSE) {
     ts_results <- read.csv(
         sprintf(
             "results/time_series/time_series_result_%s_%s.tsv",
@@ -76,11 +77,27 @@ load_ts_result <- function(species, ab) {
         sep = "\t"
     )
     headers <- c("Location", "Forecasting_Horizon")
-    headers <- c(
-        headers,
-        names(ts_results)[endsWith(names(ts_results), "cast")]
-    )
-    return(ts_results[, headers])
+    forecast_headers <- names(ts_results)[endsWith(names(ts_results), "cast")]
+    headers <- c(headers, forecast_headers)
+    out <- ts_results[, headers]
+
+    if (get_PI) {
+        pi_widths <- ts_results[
+            ,
+            names(ts_results)[endsWith(names(ts_results), "PI_Width")]
+        ]
+        pis <- pi_widths / 2
+        for (i in forecast_headers) {
+            col_start <- str_split(i, "cast_forecast")[[1]][[1]]
+            col <- paste0(col_start, "cast_PI_Width")
+            out[[paste0(col_start, "cast_upper")]] <-
+                ts_results[[i]] + pis[[col]]
+            out[[paste0(col_start, "cast_lower")]] <-
+                ts_results[[i]] - pis[[col]]
+        }
+    }
+
+    return(out)
 }
 
 
