@@ -77,10 +77,18 @@ plot_time_series <- function(species) {
 ecoli_abs <- c("AMPI", "AUGM", "CLEX", "TRIM")
 staph_abs <- c("ERYT", "MUPI", "PENI", "TETR")
 
+# for aggregated plots
+all_ecoli_abs <- c("AMPI", "AUGM", "CLEX", "TRIM", "NORF")
+all_staph_abs <- c("ERYT", "MUPI", "PENI", "TETR", "CLEX")
 
 species_ab_combos <- c(
     lapply(ecoli_abs, function(x) c("Ecoli", x)),
     lapply(staph_abs, function(x) c("Staph", x))
+)
+
+paper_species_ab_combos <- c(
+    lapply(all_ecoli_abs, function(x) c("Ecoli", x)),
+    lapply(all_staph_abs, function(x) c("Staph", x))
 )
 
 
