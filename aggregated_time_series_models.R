@@ -1,4 +1,5 @@
 library(MyForecaster)
+library(purrr)
 
 source("data_loader.R")
 source("EDA.R")
@@ -9,6 +10,13 @@ do_forecasts_ <- Vectorize(do_forecasts, c("forecasting_horizon"))
 run_forecasts <- function(data, organism, PI = 95) {
     ab <- data$Antibiotic[[1]]
     location <- data$Postcode[[1]]
+
+    # find position where the gap is more than 1 quarter if exists
+    gaps <- diff(data$Year_Quarter) > 0.25
+    if (sum(gaps) > 0) {
+        jump_index <- which(gaps, TRUE)
+        data <- head(data, jump_index)
+    }
 
     time_series <- ts(data$Perc.R,
         start = min(data$Year_Quarter),
@@ -69,6 +77,38 @@ gather_all_forecasts <- function(species_ab) {
 }
 
 
+ts_to_dataframe <- function(data) {
+    df <- data.frame(Y = as.matrix(data), date = time(data))
+    return(df)
+}
+
+
+format_forecast_data <- function(forecast) {
+    df <- data.frame(
+        time_series = as.matrix(forecast$time_series),
+        date = time(forecast$time_series)
+    )
+    forecasts <- lapply(forecast$fc_list, ts_to_dataframe) %>%
+        reduce(left_join, by = "date")
+    names(forecasts)[names(forecasts) == "Y.x"] <- "Naive"
+    names(forecasts)[names(forecasts) == "Y.y"] <- "ETS"
+    names(forecasts)[names(forecasts) == "Y"] <- "ARIMA"
+
+    df <- left_join(df, forecasts, by = "date")
+}
+
+
 main <- function() {
+    names(paper_species_ab_combos) <- lapply(
+        paper_species_ab_combos,
+        paste0,
+        collapse = "_"
+    )
     all_forecasts <- lapply(paper_species_ab_combos, gather_all_forecasts)
+    formatted_data <- lapply(all_forecasts, format_forecast_data)
+    formatted_data <- Map(
+        cbind,
+        formatted_data,
+        species_ab = names(formatted_data)
+    )
 }
