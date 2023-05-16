@@ -36,10 +36,32 @@ run_forecasts <- function(data, organism, PI = 95) {
     )
 
     naive_fc <- unlist(output["naive_forecast_forecast", ])
-    ets_fc <- unlist(output["ets_forecast_forecast", ])
-    arima_fc <- unlist(output["arima_forecast_forecast", ])
+    naive_fc_PI <- unlist(output["naive_forecast_PI_width", ]) / 2
+    naive_fc_lower <- naive_fc - naive_fc_PI
+    naive_fc_upper <- naive_fc + naive_fc_PI
 
-    fc_list <- list(naive_fc = naive_fc, ets_fc = ets_fc, arima_fc = arima_fc)
+    ets_fc <- unlist(output["ets_forecast_forecast", ])
+    ets_fc_PI <- unlist(output["ets_forecast_PI_width", ]) / 2
+    ets_fc_lower <- ets_fc - ets_fc_PI
+    ets_fc_upper <- ets_fc + ets_fc_PI
+
+    arima_fc <- unlist(output["arima_forecast_forecast", ])
+    arima_fc_PI <- unlist(output["arima_forecast_PI_width", ]) / 2
+    arima_fc_lower <- arima_fc - arima_fc_PI
+    arima_fc_upper <- arima_fc + arima_fc_PI
+
+
+    fc_list <- list(
+        naive_fc = naive_fc,
+        naive_fc_lower = naive_fc_lower,
+        naive_fc_upper = naive_fc_upper,
+        ets_fc = ets_fc,
+        ets_fc_lower = ets_fc_lower,
+        ets_fc_upper = ets_fc_upper,
+        arima_fc = arima_fc,
+        arima_fc_lower = arima_fc_lower,
+        arima_fc_upper = arima_fc_upper
+    )
     fc_list <- lapply(fc_list, ts, start = max(data$Year_Quarter) - 0.75, frequency = 4)
 
     output_list <- list(time_series = time_series, fc_list = fc_list)
@@ -77,24 +99,21 @@ gather_all_forecasts <- function(species_ab) {
 }
 
 
-ts_to_dataframe <- function(data) {
-    df <- data.frame(Y = as.matrix(data), date = time(data))
-    return(df)
-}
-
-
 format_forecast_data <- function(forecast) {
     df <- data.frame(
         time_series = as.matrix(forecast$time_series),
         date = time(forecast$time_series)
     )
-    forecasts <- lapply(forecast$fc_list, ts_to_dataframe) %>%
-        reduce(left_join, by = "date")
-    names(forecasts)[names(forecasts) == "Y.x"] <- "Naive"
-    names(forecasts)[names(forecasts) == "Y.y"] <- "ETS"
-    names(forecasts)[names(forecasts) == "Y"] <- "ARIMA"
+
+    forecasts <- as.data.frame(do.call(cbind, forecast$fc_list))
+    forecasts$date <- time(forecast$fc_list[[1]])
 
     df <- left_join(df, forecasts, by = "date")
+}
+
+
+panel_plot <- function(df) {
+
 }
 
 
@@ -111,4 +130,11 @@ main <- function() {
         formatted_data,
         species_ab = names(formatted_data)
     )
+    data <- do.call(rbind, formatted_data)
+    data <- separate(
+        data = data, col = species_ab, into = c("species", "ab"), sep = "_"
+    )
+
+    panel_plot(data[data$species == "Ecoli", ])
+    panel_plot(data[data$species == "Staph", ])
 }
