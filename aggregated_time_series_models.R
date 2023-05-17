@@ -1,5 +1,7 @@
 library(MyForecaster)
 library(purrr)
+library(tidyverse)
+library(ggplot2)
 
 source("data_loader.R")
 source("EDA.R")
@@ -62,7 +64,14 @@ run_forecasts <- function(data, organism, PI = 95) {
         arima_fc_lower = arima_fc_lower,
         arima_fc_upper = arima_fc_upper
     )
-    fc_list <- lapply(fc_list, ts, start = max(data$Year_Quarter) - 0.75, frequency = 4)
+
+    final_observation <- head(tail(time_series, 5), 1)
+    fc_list <- lapply(fc_list, function(x) c(final_observation, x))
+
+    fc_list <- lapply(
+        fc_list, ts,
+        start = max(data$Year_Quarter) - 1, frequency = 4
+    )
 
     output_list <- list(time_series = time_series, fc_list = fc_list)
     return(output_list)
@@ -112,8 +121,68 @@ format_forecast_data <- function(forecast) {
 }
 
 
-panel_plot <- function(df) {
+panel_plot <- function(df, species) {
+    names(df)[names(df) == "ets_fc"] <- "ETS"
+    names(df)[names(df) == "arima_fc"] <- "ARIMA"
 
+    colors <- c("ETS" = "red", "ARIMA" = "blue")
+
+    p <- ggplot(data = df) +
+        geom_line(aes(x = date, y = time_series)) +
+        geom_point(aes(x = date, y = time_series)) +
+        geom_line(aes(x = date, y = ETS, color = "ETS")) +
+        geom_ribbon(
+            aes(x = date, ymin = ets_fc_lower, ymax = ets_fc_upper),
+            alpha = 0.1,
+            fill = "red"
+        ) +
+        geom_line(aes(x = date, y = ARIMA, color = "ARIMA")) +
+        geom_ribbon(
+            aes(x = date, ymin = arima_fc_lower, ymax = arima_fc_upper),
+            alpha = 0.1,
+            fill = "blue"
+        ) +
+        facet_wrap(vars(ab), scales = "free") +
+        theme_minimal() +
+        ylab("Total % Resistant") +
+        xlab("Date") +
+        theme(
+            axis.text.x = element_text(angle = 45, hjust = 1),
+            legend.position = c(0.8, 0.2)
+        ) +
+        scale_color_manual(values = colors) +
+        labs(color = "Forecasting Model")
+
+    # hard code this for now
+    if (species == "Ecoli") {
+        p <- p +
+            geom_vline(
+                data = filter(df, ab == "NORF"), aes(xintercept = 2016.5),
+                linetype = "dashed"
+            ) +
+            geom_vline(
+                data = filter(df, ab == "TRIM"), aes(xintercept = 2017.75),
+                linetype = "dashed"
+            ) +
+            geom_vline(
+                data = filter(df, ab == "AMPI"), aes(xintercept = 2017.75),
+                linetype = "dashed"
+            ) +
+            geom_vline(
+                data = filter(df, ab == "AUGM"), aes(xintercept = 2017.75),
+                linetype = "dashed"
+            ) +
+            geom_vline(
+                data = filter(df, ab == "CLEX"), aes(xintercept = 2017.75),
+                linetype = "dashed"
+            )
+    } else {
+        p <- p + geom_vline(
+            data = df, aes(xintercept = 2017.75), linetype = "dashed"
+        )
+    }
+
+    return(p)
 }
 
 
@@ -135,6 +204,6 @@ main <- function() {
         data = data, col = species_ab, into = c("species", "ab"), sep = "_"
     )
 
-    panel_plot(data[data$species == "Ecoli", ])
-    panel_plot(data[data$species == "Staph", ])
+    ecoli_plot <- panel_plot(data[data$species == "Ecoli", ], "Ecoli")
+    staph_plot <- panel_plot(data[data$species == "Staph", ], "Staph")
 }
